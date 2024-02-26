@@ -1,0 +1,219 @@
+- name: Config new machine
+  hosts: otusprojnew
+  
+  gather_facts: false
+  tasks:
+    - name: DNF Update
+      become: true
+      tags:
+        - setup
+      ansible.builtin.dnf:
+        update_cache: yes
+  
+    - name: Upgrade all packages
+      become: true
+      tags:
+        - setup
+      ansible.builtin.dnf:
+        name: "*"
+        state: latest
+
+    - name: Install Docker, Docker-Compose, Cockpit
+      become: true
+      tags:
+        - setup
+      ansible.builtin.dnf:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - cockpit
+        - cockpit-machines
+        - cockpit-storaged
+        - docker-ce
+        - docker-ce-cli
+        - docker-compose
+  
+    - name: Copy cockpit-docker.tar.gz
+      become: true
+      tags:
+        - copy
+      copy:
+        src: cockpit-docker.tar.gz
+        dest: /usr/share/cockpit
+        remote_src: no
+        mode: 0644
+        owner: root
+        group: root
+   
+    - name: Unarchive cockpit-docker.tar.gz
+      become: true
+      tags:
+        - copy
+      unarchive:
+        src: /usr/share/cockpit/cockpit-docker.tar.gz
+        dest: /usr/share/cockpit/
+        remote_src: yes
+
+    - name: Enable & Start cockpit.socket
+      become: true
+      tags:
+        - setup
+      systemd:
+        name: cockpit.socket
+        state: started
+        enabled: yes
+
+    - name: Enable & Start docker
+      tags:
+        - config
+      become: true
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Create Backup dir
+      tags:
+        - config
+      ansible.builtin.file:
+        path: /home/artys/backups
+        state: directory
+
+    - name: Copy Kibana Image to Host
+      tags:
+        - copy
+      copy:
+        src: backups/192.168.88.37/home/artys/backups/kibana.tar
+        dest: /home/artys/backups/
+    
+    - name: Copy Elasticsearch Image to Host
+      tags:
+        - copy
+      copy:
+        src: backups/192.168.88.37/home/artys/backups/elasticsearch.tar
+        dest: /home/artys/backups/
+
+    - name: Copy Filebeat Image to Host
+      tags:
+        - copy
+      copy: 
+        src: backups/192.168.88.37/home/artys/backups/filebeat.tar
+        dest: /home/artys/backups/
+
+    - name: Copy Nginx Image to Host
+      tags:
+        - copy
+      copy: 
+        src: backups/192.168.88.37/home/artys/backups/nginx.tar
+        dest: /home/artys/backups/
+
+    - name: Copy Project archieve to Host
+      copy: 
+        src: backups/192.168.88.37/home/artys/backups/otus-proj.tgz
+        dest: /home/artys/backups/
+    
+    - name: add user 'artys' to group docker
+      become: true
+      tags:
+         - configuration
+      user:
+        name: artys
+        comment: artys
+        groups: artys, wheel, docker
+        append: yes
+
+    - name: Load Elastic image from tarball
+      tags:
+        - docker
+      docker_image:
+        name: 'docker.elastic.co/elasticsearch/elasticsearch'
+        tag: 8.12.1
+        load_path: /home/artys/backups/elasticsearch.tar
+        state: present
+        source: load
+    
+    - name: Load Kibana image from tarball
+      tags:
+        - docker
+      docker_image:
+        name: 'docker.elastic.co/kibana/kibana'
+        tag: 8.12.1
+        load_path: /home/artys/backups/kibana.tar
+        state: present
+        source: load
+    
+    - name: Load Filebeat image from tarball
+      tags:
+        - docker
+      docker_image:
+        name: 'docker.elastic.co/beats/filebeat'
+        tag: 8.12.1
+        load_path: /home/artys/backups/filebeat.tar
+        state: present
+        source: load
+
+    - name: Load Nginx image from tarball
+      tags:
+        - docker
+      docker_image:
+        name: nginx
+        tag: latest
+        load_path: /home/artys/backups/nginx.tar
+        state: present
+        source: load
+    
+    - name: Create docker dir in home
+      tags:
+        - copy
+      file:
+        path: /home/artys/docker/otus-proj
+        state: directory
+
+    - name: Unarchive project to same directory
+      tags:
+        - copy
+      unarchive:
+        src: /home/artys/backups/otus-proj.tgz
+        dest: /home/artys/docker/otus-proj
+        remote_src: yes
+    
+    - name: Disable IPv6 with sysctl
+      become: true
+      ansible.posix.sysctl:
+        name: "{{ item }}"
+        value: "1"
+        state: "present"
+        reload: "yes"
+      tags:
+        - config
+      with_items:
+      - net.ipv6.conf.all.disable_ipv6
+      - net.ipv6.conf.default.disable_ipv6
+      - net.ipv6.conf.lo.disable_ipv6
+
+      ### Change IP addresses in .env ###
+    
+    - name: Run init.sh to change MAIN_IP and DNS_IP in .env
+      tags:
+        - config
+      shell: sh init.sh
+      args:
+        chdir: /home/artys/docker/otus-proj
+      
+    - name: Copy .service to /etc/systemd/system/
+      become: true
+      tags: 
+        - config
+      copy: 
+        src: /home/artys/docker/otus-proj/config/nf-app.service
+        dest: /etc/systemd/system/
+        remote_src: yes
+    
+    - name: Enable & Start cockpit.socket
+      become: true
+      tags:
+        - start
+      systemd:
+        name: nf-app.service
+        state: started
+        enabled: yes

@@ -1,0 +1,70 @@
+### BACKUP PROJECT PLAYBOOK ###
+
+- name: Create Backup of current state of project
+  hosts: otusproj
+  #become: true
+  gather_facts: false
+  tasks:
+    - name: Create Backup dir
+      ansible.builtin.file:
+        path: /home/artys/backups
+        state: directory
+
+    - name: Create Backup of current Project state
+      community.general.archive:
+         path: /home/artys/docker/otus-proj/.
+         dest: /home/artys/backups/otus-proj.tgz
+
+    - name: Archive Nginx image as a tarball
+      docker_image:
+        name: nginx
+        tag: latest
+        archive_path: /home/artys/backups/nginx.tar
+        source: local
+
+    - name: Archive Kibana image as a tarball
+      docker_image: 
+        name: 'docker.elastic.co/kibana/kibana'
+        tag: 8.12.1
+        archive_path: /home/artys/backups/kibana.tar
+        source: local
+
+    - name: Archive Elasticsearch image as a tarball
+      docker_image:
+        name: 'docker.elastic.co/elasticsearch/elasticsearch'
+        tag: 8.12.1
+        archive_path: /home/artys/backups/elasticsearch.tar
+        source: local
+
+    - name: Archive Filebeat image as a tarball
+      docker_image:
+        name: 'docker.elastic.co/beats/filebeat'
+        tag: 8.12.1
+        archive_path: /home/artys/backups/filebeat.tar
+        source: local
+
+    - name: Copy Kinaba image to this host
+      fetch:
+        src: /home/artys/backups/kibana.tar
+        dest: backups/
+
+    - name: Copy Elasticsearc image to this host
+      fetch:
+        src: /home/artys/backups/elasticsearch.tar
+        dest: backups/      
+
+    - name: Copy Filebeat image to this host
+      fetch:
+        src: /home/artys/backups/filebeat.tar
+        dest: backups/
+    
+    - name: Copy Nginx image to this host
+      fetch:
+        src: /home/artys/backups/nginx.tar
+        dest: backups/
+
+    - name: Copy archieve with project  to this host
+      fetch:
+        src: /home/artys/backups/otus-proj.tgz
+        dest: backups/
+
