@@ -1,0 +1,21 @@
+### BACKUP PROJECT VOLUMES PLAYBOOK ###
+
+- name: Create Backup of current state of project
+  hosts: otusproj
+  #become: true
+  gather_facts: false
+  tasks:
+
+    - name: Create Backup of Volumes Project state
+      tags:
+        - test
+      community.general.archive:
+         path: /home/artys/docker/otus-proj/volumes/.
+         dest: /home/artys/backups/volumes.tgz
+
+    - name: Copy archieve with Project Volumes to this host
+      tags:
+        - test
+      fetch:
+        src: /home/artys/backups/volumes.tgz
+        dest: backups/
