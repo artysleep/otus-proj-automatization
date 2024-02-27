@@ -7,6 +7,8 @@
   tasks:
   ### create dir for backups on local machine
     - name: Create Backup dir
+      tags:
+        - archive
       ansible.builtin.file:
         path: /home/artys/backups
         state: directory
@@ -17,6 +19,8 @@
          dest: /home/artys/backups/otus-proj.tgz
 
     - name: Archive Nginx image as a tarball
+      tags:
+        - archive
       docker_image:
         name: nginx
         tag: latest
@@ -24,6 +28,8 @@
         source: local
 
     - name: Archive Kibana image as a tarball
+      tags:
+        - archive
       docker_image: 
         name: 'docker.elastic.co/kibana/kibana'
         tag: 8.12.1
@@ -31,6 +37,8 @@
         source: local
 
     - name: Archive Elasticsearch image as a tarball
+      tags:
+        - archive
       docker_image:
         name: 'docker.elastic.co/elasticsearch/elasticsearch'
         tag: 8.12.1
@@ -38,47 +46,58 @@
         source: local
 
     - name: Archive Filebeat image as a tarball
+      tags:
+        - archive
       docker_image:
         name: 'docker.elastic.co/beats/filebeat'
         tag: 8.12.1
         archive_path: /home/artys/backups/filebeat.tar
         source: local
+
+    - name: Check backups are crated in systemctl
+      become: true
+      tags:
+        - check
+      shell: ls -lah /home/artys/backups/
+      register: result
+
+    - name: Debug registered var
+      tags:
+        - check
+      debug: var=result.stdout_lines
+
   ### copy backups to Ansible host
     - name: Copy Kinaba image to this host
+      tags:
+        - copy
       fetch:
         src: /home/artys/backups/kibana.tar
         dest: backups/
 
     - name: Copy Elasticsearc image to this host
+      tags:
+        - copy
       fetch:
         src: /home/artys/backups/elasticsearch.tar
         dest: backups/      
 
     - name: Copy Filebeat image to this host
+      tags:
+        - copy
       fetch:
         src: /home/artys/backups/filebeat.tar
         dest: backups/
     
     - name: Copy Nginx image to this host
+      tags:
+        - copy
       fetch:
         src: /home/artys/backups/nginx.tar
         dest: backups/
 
     - name: Copy archieve with project  to this host
+      tags:
+        - copy
       fetch:
         src: /home/artys/backups/otus-proj.tgz
-        dest: backups/
-
-    - name: Create Backup of Volumes Project state
-      tags:
-        - test
-      community.general.archive:
-         path: /home/artys/docker/otus-proj/volumes/.
-         dest: /home/artys/backups/volumes.tgz
-
-    - name: Copy archieve with Project Volumes to this host
-      tags:
-        - test
-      fetch:
-        src: /home/artys/backups/volumes.tgz
         dest: backups/

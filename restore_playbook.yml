@@ -231,3 +231,26 @@
         name: nf-app.service
         state: started
         enabled: yes
+    
+    - name: Check containers are up
+      tags:
+        - test
+      shell: docker ps -a
+      register: result
+    
+    - name: Debug registered var
+      tags:
+        - test
+      debug: var=result.stdout_lines
+
+    - name: Check service status in systemctl
+      become: true
+      tags:
+        - test
+      shell: systemctl status nf-app
+      register: result
+    
+    - name: Debug registered var
+      tags:
+        - test
+      debug: var=result.stdout_lines
