@@ -234,23 +234,33 @@
     
     - name: Check containers are up
       tags:
-        - test
+        - check
       shell: docker ps -a
       register: result
     
     - name: Debug registered var
       tags:
-        - test
+        - check
       debug: var=result.stdout_lines
 
     - name: Check service status in systemctl
       become: true
       tags:
-        - test
+        - check
       shell: systemctl status nf-app
       register: result
     
     - name: Debug registered var
       tags:
-        - test
+        - check
       debug: var=result.stdout_lines
+
+  ### add logs dir
+    - name: Create Backup dir
+      become: true
+      tags:
+        - test
+      ansible.builtin.file:
+        path: /var/log/nf-app
+        mode: '0777'
+        state: directory
