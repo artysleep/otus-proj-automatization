@@ -5,6 +5,20 @@
   #become: true
   gather_facts: false
   tasks:
+  ### stop service before backup (cause ES indicies)
+    - name: Stop nf-app before backup
+      become: true
+      tags:
+        - stop
+      systemd:
+        name: nf-app
+        state: stopped
+      register: result
+  ### check stopped
+    - name: Show status
+      tags:
+        - check
+      debug: var=result.stdout_lines
   ### create dir for backups on local machine
     - name: Create Backup dir
       tags:
@@ -12,49 +26,65 @@
       ansible.builtin.file:
         path: /home/artys/backups
         state: directory
+  
   ### create backups of proj and images
     - name: Create Backup of current Project state
       community.general.archive:
          path: /home/artys/docker/otus-proj/.
          dest: /home/artys/backups/otus-proj.tgz
 
-    - name: Archive Nginx image as a tarball
+    - name: Archive all images as a tarball
       tags:
         - archive
       docker_image:
-        name: nginx
-        tag: latest
-        archive_path: /home/artys/backups/nginx.tar
+        name: "{{ item.name }}"
+        tag: "{{ item.tag }}"
+        archive_path: "{{ item.path }}"
         source: local
+      loop:
+        - { name: 'docker.elastic.co/elasticsearch/elasticsearch', tag: '8.12.1', path: '/home/artys/backups/elasticsearch.tar' }
+        - { name: 'docker.elastic.co/kibana/kibana', tag: '8.12.1', path: '/home/artys/backups/kibana.tar' }
+        - { name: 'docker.elastic.co/beats/filebeat', tag: '8.12.1', path: '/home/artys/backups/filebeat.tar' }
+        - { name: 'nginx', tag: 'last', path: '/home/artys/backups/nginx.tar' }
+      
+    
+    # - name: Archive Nginx image as a tarball
+    #   tags:
+    #     - archive
+    #   docker_image:
+    #     name: nginx
+    #     tag: latest
+    #     archive_path: /home/artys/backups/nginx.tar
+    #     source: local
 
-    - name: Archive Kibana image as a tarball
-      tags:
-        - archive
-      docker_image: 
-        name: 'docker.elastic.co/kibana/kibana'
-        tag: 8.12.1
-        archive_path: /home/artys/backups/kibana.tar
-        source: local
+    # - name: Archive Kibana image as a tarball
+    #   tags:
+    #     - archive
+    #   docker_image: 
+    #     name: 'docker.elastic.co/kibana/kibana'
+    #     tag: 8.12.1
+    #     archive_path: /home/artys/backups/kibana.tar
+    #     source: local
 
-    - name: Archive Elasticsearch image as a tarball
-      tags:
-        - archive
-      docker_image:
-        name: 'docker.elastic.co/elasticsearch/elasticsearch'
-        tag: 8.12.1
-        archive_path: /home/artys/backups/elasticsearch.tar
-        source: local
+    # - name: Archive Elasticsearch image as a tarball
+    #   tags:
+    #     - archive
+    #   docker_image:
+    #     name: 'docker.elastic.co/elasticsearch/elasticsearch'
+    #     tag: 8.12.1
+    #     archive_path: /home/artys/backups/elasticsearch.tar
+    #     source: local
 
-    - name: Archive Filebeat image as a tarball
-      tags:
-        - archive
-      docker_image:
-        name: 'docker.elastic.co/beats/filebeat'
-        tag: 8.12.1
-        archive_path: /home/artys/backups/filebeat.tar
-        source: local
+    # - name: Archive Filebeat image as a tarball
+    #   tags:
+    #     - archive
+    #   docker_image:
+    #     name: 'docker.elastic.co/beats/filebeat'
+    #     tag: 8.12.1
+    #     archive_path: /home/artys/backups/filebeat.tar
+    #     source: local
 
-    - name: Check backups are crated in systemctl
+    - name: Check backups are created in systemctl
       become: true
       tags:
         - check
@@ -71,33 +101,60 @@
       tags:
         - copy
       fetch:
-        src: /home/artys/backups/kibana.tar
+        src: "{{ item }}"
         dest: backups/
+      loop: 
+        - /home/artys/backups/kibana.tar
+        - /home/artys/backups/elasticsearch.tar
+        - /home/artys/backups/nginx.tar
+        - /home/artys/backups/filebeat.tar
+        - /home/artys/backups/otus-proj.tgz
 
-    - name: Copy Elasticsearc image to this host
-      tags:
-        - copy
-      fetch:
-        src: /home/artys/backups/elasticsearch.tar
-        dest: backups/      
 
-    - name: Copy Filebeat image to this host
-      tags:
-        - copy
-      fetch:
-        src: /home/artys/backups/filebeat.tar
-        dest: backups/
+    # - name: Copy Elasticsearc image to this host
+    #   tags:
+    #     - copy
+    #   fetch:
+    #     src: /home/artys/backups/elasticsearch.tar
+    #     dest: backups/      
+
+    # - name: Copy Filebeat image to this host
+    #   tags:
+    #     - copy
+    #   fetch:
+    #     src: /home/artys/backups/filebeat.tar
+    #     dest: backups/
     
-    - name: Copy Nginx image to this host
-      tags:
-        - copy
-      fetch:
-        src: /home/artys/backups/nginx.tar
-        dest: backups/
+    # - name: Copy Nginx image to this host
+    #   tags:
+    #     - copy
+    #   fetch:
+    #     src: /home/artys/backups/nginx.tar
+    #     dest: backups/
 
-    - name: Copy archieve with project  to this host
+    # - name: Copy archieve with project  to this host
+    #   tags:
+    #     - copy
+    #   fetch:
+    #     src: /home/artys/backups/otus-proj.tgz
+    #     dest: backups/
+
+    - name: Enable & Start nf-app
+      become: true
       tags:
-        - copy
-      fetch:
-        src: /home/artys/backups/otus-proj.tgz
-        dest: backups/
+        - start
+      systemd:
+        name: nf-app
+        state: started
+        enabled: yes
+    
+    - name: Check containers are up
+      tags:
+        - check
+      shell: docker ps -a
+      register: result
+    
+    - name: Debug registered var
+      tags:
+        - check
+      debug: var=result.stdout_lines

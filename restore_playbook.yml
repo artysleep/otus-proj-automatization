@@ -81,41 +81,65 @@
       ansible.builtin.file:
         path: /home/artys/backups
         state: directory
+      
+  ### add logs dir
+    - name: Create Log dir
+      become: true
+      tags:
+        - check
+      ansible.builtin.file:
+        path: /var/log/nf-app
+        mode: 0777
+        state: directory
+        owner: artys
+        group: artys
 
   # copy all backups to new machine
-
-    - name: Copy Kibana Image to Host
+    - name: Copy Images and Project Backup to New Host
       tags:
         - copy
       copy:
-        src: backups/192.168.88.37/home/artys/backups/kibana.tar
+        src: "backups/192.168.88.37/home/artys/backups/{{ item }}"
         dest: /home/artys/backups/
+      loop:
+        - kibana.tar
+        - elasticsearch.tar
+        - nginx.tar
+        - filebeat.tar
+        - otus-proj.tgz
+
+    # - name: Copy Kibana Image to Host
+    #   tags:
+    #     - copy
+    #   copy:
+    #     src: backups/192.168.88.37/home/artys/backups/kibana.tar
+    #     dest: /home/artys/backups/
     
-    - name: Copy Elasticsearch Image to Host
-      tags:
-        - copy
-      copy:
-        src: backups/192.168.88.37/home/artys/backups/elasticsearch.tar
-        dest: /home/artys/backups/
+    # - name: Copy Elasticsearch Image to Host
+    #   tags:
+    #     - copy
+    #   copy:
+    #     src: backups/192.168.88.37/home/artys/backups/elasticsearch.tar
+    #     dest: /home/artys/backups/
 
-    - name: Copy Filebeat Image to Host
-      tags:
-        - copy
-      copy: 
-        src: backups/192.168.88.37/home/artys/backups/filebeat.tar
-        dest: /home/artys/backups/
+    # - name: Copy Filebeat Image to Host
+    #   tags:
+    #     - copy
+    #   copy: 
+    #     src: backups/192.168.88.37/home/artys/backups/filebeat.tar
+    #     dest: /home/artys/backups/
 
-    - name: Copy Nginx Image to Host
-      tags:
-        - copy
-      copy: 
-        src: backups/192.168.88.37/home/artys/backups/nginx.tar
-        dest: /home/artys/backups/
+    # - name: Copy Nginx Image to Host
+    #   tags:
+    #     - copy
+    #   copy: 
+    #     src: backups/192.168.88.37/home/artys/backups/nginx.tar
+    #     dest: /home/artys/backups/
 
-    - name: Copy Project archieve to Host
-      copy: 
-        src: backups/192.168.88.37/home/artys/backups/otus-proj.tgz
-        dest: /home/artys/backups/
+    # - name: Copy Project archieve to Host
+    #   copy: 
+    #     src: backups/192.168.88.37/home/artys/backups/otus-proj.tgz
+    #     dest: /home/artys/backups/
 
   ### add user to group docker
     
@@ -132,44 +156,60 @@
   ### add backuped images
 
     - name: Load Elastic image from tarball
+      become_user: artys
       tags:
         - docker
       docker_image:
-        name: 'docker.elastic.co/elasticsearch/elasticsearch'
-        tag: 8.12.1
-        load_path: /home/artys/backups/elasticsearch.tar
+        name: "{{ item.name }}"
+        tag: "{{ item.tag }}"
+        load_path: "/home/artys/backups/{{ item.path }}"
         state: present
         source: load
+      loop:
+        - { name: 'docker.elastic.co/elasticsearch/elasticsearch', tag: '8.12.1', path: 'elasticsearch.tar' }
+        - { name: 'docker.elastic.co/kibana/kibana', tag: '8.12.1', path: 'kibana.tar' }
+        - { name: 'docker.elastic.co/beats/filebeat', tag: '8.12.1', path: 'filebeat.tar' }
+        - { name: 'nginx', tag: 'latest', path: 'nginx.tar' }
+  
+    # - name: Load Elastic image from tarball
+    #   tags:
+    #     - docker
+    #   docker_image:
+    #     name: 'docker.elastic.co/elasticsearch/elasticsearch'
+    #     tag: 8.12.1
+    #     load_path: /home/artys/backups/elasticsearch.tar
+    #     state: present
+    #     source: load
     
-    - name: Load Kibana image from tarball
-      tags:
-        - docker
-      docker_image:
-        name: 'docker.elastic.co/kibana/kibana'
-        tag: 8.12.1
-        load_path: /home/artys/backups/kibana.tar
-        state: present
-        source: load
+    # - name: Load Kibana image from tarball
+    #   tags:
+    #     - docker
+    #   docker_image:
+    #     name: 'docker.elastic.co/kibana/kibana'
+    #     tag: 8.12.1
+    #     load_path: /home/artys/backups/kibana.tar
+    #     state: present
+    #     source: load
     
-    - name: Load Filebeat image from tarball
-      tags:
-        - docker
-      docker_image:
-        name: 'docker.elastic.co/beats/filebeat'
-        tag: 8.12.1
-        load_path: /home/artys/backups/filebeat.tar
-        state: present
-        source: load
+    # - name: Load Filebeat image from tarball
+    #   tags:
+    #     - docker
+    #   docker_image:
+    #     name: 'docker.elastic.co/beats/filebeat'
+    #     tag: 8.12.1
+    #     load_path: /home/artys/backups/filebeat.tar
+    #     state: present
+    #     source: load
 
-    - name: Load Nginx image from tarball
-      tags:
-        - docker
-      docker_image:
-        name: nginx
-        tag: latest
-        load_path: /home/artys/backups/nginx.tar
-        state: present
-        source: load
+    # - name: Load Nginx image from tarball
+    #   tags:
+    #     - docker
+    #   docker_image:
+    #     name: nginx
+    #     tag: latest
+    #     load_path: /home/artys/backups/nginx.tar
+    #     state: present
+    #     source: load
     
     - name: Create docker dir in home
       tags:
@@ -177,7 +217,6 @@
       file:
         path: /home/artys/docker/otus-proj
         state: directory
-
   
     - name: Unarchive project to same directory
       tags:
@@ -186,6 +225,7 @@
         src: /home/artys/backups/otus-proj.tgz
         dest: /home/artys/docker/otus-proj
         remote_src: yes
+
   ### there is no need to use IPv6 in this project and this part used to run init.sh correct
     - name: Disable IPv6 with sysctl
       become: true
@@ -223,12 +263,12 @@
 
   ### add nf-app to autorun and start it
     
-    - name: Enable & Start cockpit.socket
+    - name: Enable & Start nf-app
       become: true
       tags:
         - start
       systemd:
-        name: nf-app.service
+        name: nf-app
         state: started
         enabled: yes
     
@@ -238,7 +278,7 @@
       shell: docker ps -a
       register: result
     
-    - name: Debug registered var
+    - name: Try to see 'docker ps -a'
       tags:
         - check
       debug: var=result.stdout_lines
@@ -250,17 +290,8 @@
       shell: systemctl status nf-app
       register: result
     
-    - name: Debug registered var
+    - name: Try to see 'systemctl status nf-app'
       tags:
         - check
       debug: var=result.stdout_lines
 
-  ### add logs dir
-    - name: Create Backup dir
-      become: true
-      tags:
-        - test
-      ansible.builtin.file:
-        path: /var/log/nf-app
-        mode: '0777'
-        state: directory
