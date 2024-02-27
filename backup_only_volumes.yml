@@ -2,7 +2,7 @@
 
 - name: Create Backup of current state of project
   hosts: otusproj
-  #become: true
+  #become: true 
   gather_facts: false
   tasks:
 

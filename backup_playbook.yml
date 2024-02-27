@@ -5,11 +5,12 @@
   #become: true
   gather_facts: false
   tasks:
+  ### create dir for backups on local machine
     - name: Create Backup dir
       ansible.builtin.file:
         path: /home/artys/backups
         state: directory
-
+  ### create backups of proj and images
     - name: Create Backup of current Project state
       community.general.archive:
          path: /home/artys/docker/otus-proj/.
@@ -42,7 +43,7 @@
         tag: 8.12.1
         archive_path: /home/artys/backups/filebeat.tar
         source: local
-
+  ### copy backups to Ansible host
     - name: Copy Kinaba image to this host
       fetch:
         src: /home/artys/backups/kibana.tar

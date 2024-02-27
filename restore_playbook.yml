@@ -3,6 +3,9 @@
   
   gather_facts: false
   tasks:
+
+  ### install docker and cockpit to monitoring containers state
+
     - name: DNF Update
       become: true
       tags:
@@ -36,7 +39,7 @@
     - name: Copy cockpit-docker.tar.gz
       become: true
       tags:
-        - copy
+        - setup
       copy:
         src: cockpit-docker.tar.gz
         dest: /usr/share/cockpit
@@ -48,7 +51,7 @@
     - name: Unarchive cockpit-docker.tar.gz
       become: true
       tags:
-        - copy
+        - setup
       unarchive:
         src: /usr/share/cockpit/cockpit-docker.tar.gz
         dest: /usr/share/cockpit/
@@ -78,6 +81,8 @@
       ansible.builtin.file:
         path: /home/artys/backups
         state: directory
+
+  # copy all backups to new machine
 
     - name: Copy Kibana Image to Host
       tags:
@@ -111,6 +116,8 @@
       copy: 
         src: backups/192.168.88.37/home/artys/backups/otus-proj.tgz
         dest: /home/artys/backups/
+
+  ### add user to group docker
     
     - name: add user 'artys' to group docker
       become: true
@@ -121,6 +128,8 @@
         comment: artys
         groups: artys, wheel, docker
         append: yes
+
+  ### add backuped images
 
     - name: Load Elastic image from tarball
       tags:
@@ -169,6 +178,7 @@
         path: /home/artys/docker/otus-proj
         state: directory
 
+  
     - name: Unarchive project to same directory
       tags:
         - copy
@@ -176,7 +186,7 @@
         src: /home/artys/backups/otus-proj.tgz
         dest: /home/artys/docker/otus-proj
         remote_src: yes
-    
+  ### there is no need to use IPv6 in this project and this part used to run init.sh correct
     - name: Disable IPv6 with sysctl
       become: true
       ansible.posix.sysctl:
@@ -191,7 +201,7 @@
       - net.ipv6.conf.default.disable_ipv6
       - net.ipv6.conf.lo.disable_ipv6
 
-      ### Change IP addresses in .env ###
+  ### change IP addresses in .env ###
     
     - name: Run init.sh to change MAIN_IP and DNS_IP in .env
       tags:
@@ -199,6 +209,8 @@
       shell: sh init.sh
       args:
         chdir: /home/artys/docker/otus-proj
+  
+  ### copy service unit to be able operate with app from systemctl
       
     - name: Copy .service to /etc/systemd/system/
       become: true
@@ -208,6 +220,8 @@
         src: /home/artys/docker/otus-proj/config/nf-app.service
         dest: /etc/systemd/system/
         remote_src: yes
+
+  ### add nf-app to autorun and start it
     
     - name: Enable & Start cockpit.socket
       become: true
