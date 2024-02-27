@@ -108,41 +108,7 @@
         - filebeat.tar
         - otus-proj.tgz
 
-    # - name: Copy Kibana Image to Host
-    #   tags:
-    #     - copy
-    #   copy:
-    #     src: backups/192.168.88.37/home/artys/backups/kibana.tar
-    #     dest: /home/artys/backups/
-    
-    # - name: Copy Elasticsearch Image to Host
-    #   tags:
-    #     - copy
-    #   copy:
-    #     src: backups/192.168.88.37/home/artys/backups/elasticsearch.tar
-    #     dest: /home/artys/backups/
-
-    # - name: Copy Filebeat Image to Host
-    #   tags:
-    #     - copy
-    #   copy: 
-    #     src: backups/192.168.88.37/home/artys/backups/filebeat.tar
-    #     dest: /home/artys/backups/
-
-    # - name: Copy Nginx Image to Host
-    #   tags:
-    #     - copy
-    #   copy: 
-    #     src: backups/192.168.88.37/home/artys/backups/nginx.tar
-    #     dest: /home/artys/backups/
-
-    # - name: Copy Project archieve to Host
-    #   copy: 
-    #     src: backups/192.168.88.37/home/artys/backups/otus-proj.tgz
-    #     dest: /home/artys/backups/
-
-  ### add user to group docker
-    
+  ### add user to group docker  
     - name: add user 'artys' to group docker
       become: true
       tags:
@@ -155,7 +121,7 @@
 
   ### add backuped images
 
-    - name: Load Elastic image from tarball
+    - name: Load all images from tarball
       become_user: artys
       tags:
         - docker
@@ -171,46 +137,6 @@
         - { name: 'docker.elastic.co/beats/filebeat', tag: '8.12.1', path: 'filebeat.tar' }
         - { name: 'nginx', tag: 'latest', path: 'nginx.tar' }
   
-    # - name: Load Elastic image from tarball
-    #   tags:
-    #     - docker
-    #   docker_image:
-    #     name: 'docker.elastic.co/elasticsearch/elasticsearch'
-    #     tag: 8.12.1
-    #     load_path: /home/artys/backups/elasticsearch.tar
-    #     state: present
-    #     source: load
-    
-    # - name: Load Kibana image from tarball
-    #   tags:
-    #     - docker
-    #   docker_image:
-    #     name: 'docker.elastic.co/kibana/kibana'
-    #     tag: 8.12.1
-    #     load_path: /home/artys/backups/kibana.tar
-    #     state: present
-    #     source: load
-    
-    # - name: Load Filebeat image from tarball
-    #   tags:
-    #     - docker
-    #   docker_image:
-    #     name: 'docker.elastic.co/beats/filebeat'
-    #     tag: 8.12.1
-    #     load_path: /home/artys/backups/filebeat.tar
-    #     state: present
-    #     source: load
-
-    # - name: Load Nginx image from tarball
-    #   tags:
-    #     - docker
-    #   docker_image:
-    #     name: nginx
-    #     tag: latest
-    #     load_path: /home/artys/backups/nginx.tar
-    #     state: present
-    #     source: load
-    
     - name: Create docker dir in home
       tags:
         - copy
