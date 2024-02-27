@@ -1,0 +1,14 @@
+
+- name: Run show commands on routers
+  hosts: ios
+  gather_facts: false
+
+  tasks:
+
+    - name: run sh ip int br
+      ios_command:
+        commands: sh ip int br
+
+    - name: run sh ip arp
+      ios_command:
+        commands: sh ip arp

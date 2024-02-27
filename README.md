@@ -8,32 +8,85 @@ ansible-playbook backup_playbook.yml -k
 ```
 Проверка создания РК:
 ```sh
-09:08 $ ansible-playbook backup_playbook.yml --tags "check" --vault-id artys@~/ansible-vault.pass
+PLAY [Create Backup of current state of project] ***************************************************************************************************************************************************************
 
-PLAY [Create Backup of current state of project] ********************************************************************************************************************************************************************************
-
-TASK [Check backups are crated in systemctl] ************************************************************************************************************************************************************************************
-[WARNING]: Platform linux on host 192.168.88.37 is using the discovered Python interpreter at /usr/bin/python3.8, but future installation of another Python interpreter could change the meaning of that path. See
+TASK [Gathering Facts] *****************************************************************************************************************************************************************************************
+[WARNING]: Platform linux on host otusproj is using the discovered Python interpreter at /usr/bin/python3.8, but future installation of another Python interpreter could change the meaning of that path. See
 https://docs.ansible.com/ansible-core/2.15/reference_appendices/interpreter_discovery.html for more information.
-changed: [192.168.88.37]
+ok: [otusproj]
 
-TASK [Debug registered var] *****************************************************************************************************************************************************************************************************
-ok: [192.168.88.37] => {
+TASK [Display the current timestamp in YYYY-MM-DD] *************************************************************************************************************************************************************
+ok: [otusproj] => {
+    "ansible_date_time.date": "2024-02-27"
+}
+
+TASK [Create Ansible dir for backups] **************************************************************************************************************************************************************************
+ok: [otusproj -> localhost]
+
+TASK [Stop nf-app before backup] *******************************************************************************************************************************************************************************
+changed: [otusproj]
+
+TASK [Create Backup dir] ***************************************************************************************************************************************************************************************
+ok: [otusproj]
+
+TASK [Create Backup of current Project state] ******************************************************************************************************************************************************************
+changed: [otusproj]
+
+TASK [Archive all images as a tarball] *************************************************************************************************************************************************************************
+ok: [otusproj] => (item={'name': 'docker.elastic.co/elasticsearch/elasticsearch', 'tag': '8.12.1', 'path': 'elasticsearch.tar'})
+ok: [otusproj] => (item={'name': 'docker.elastic.co/kibana/kibana', 'tag': '8.12.1', 'path': 'kibana.tar'})
+ok: [otusproj] => (item={'name': 'docker.elastic.co/beats/filebeat', 'tag': '8.12.1', 'path': 'filebeat.tar'})
+ok: [otusproj] => (item={'name': 'nginx', 'tag': 'latest', 'path': 'nginx.tar'})
+
+TASK [Check backups are created in systemctl] ******************************************************************************************************************************************************************
+changed: [otusproj]
+
+TASK [Debug registered var] ************************************************************************************************************************************************************************************
+ok: [otusproj] => {
     "result.stdout_lines": [
-        "total 3.6G",
+        "total 3.8G",
         "drwxrwxr-x.  2 artys artys 4.0K Feb 26 17:08 .",
-        "drwx------. 21 artys artys 4.0K Feb 26 17:50 ..",
+        "drwx------. 21 artys artys 4.0K Feb 27 18:59 ..",
         "-rw-rw-r--.  1 artys artys 1.3G Feb 26 12:34 elasticsearch.tar",
         "-rw-rw-r--.  1 artys artys 314M Feb 26 12:35 filebeat.tar",
         "-rw-rw-r--.  1 artys artys 1.1G Feb 26 12:33 kibana.tar",
         "-rw-rw-r--.  1 artys artys 183M Feb 26 12:32 nginx.tar",
-        "-rw-rw-r--.  1 artys artys 364M Feb 26 16:53 otus-proj.tgz",
-        "-rw-rw-r--.  1 artys artys 367M Feb 27 08:38 volumes.tgz"
+        "-rw-rw-r--.  1 artys artys 524M Feb 27 20:43 otus-proj.tgz",
+        "-rw-rw-r--.  1 artys artys 429M Feb 27 11:50 volumes.tgz"
     ]
 }
 
-PLAY RECAP **********************************************************************************************************************************************************************************************************************
-192.168.88.37              : ok=2    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+TASK [Copy all images to this host] ****************************************************************************************************************************************************************************
+changed: [otusproj] => (item=kibana.tar)
+changed: [otusproj] => (item=elasticsearch.tar)
+changed: [otusproj] => (item=nginx.tar)
+changed: [otusproj] => (item=filebeat.tar)
+
+TASK [Copy project to this host] *******************************************************************************************************************************************************************************
+changed: [otusproj] => (item=kibana.tar)
+ok: [otusproj] => (item=elasticsearch.tar)
+ok: [otusproj] => (item=nginx.tar)
+ok: [otusproj] => (item=filebeat.tar)
+
+TASK [Enable & Start nf-app] ***********************************************************************************************************************************************************************************
+changed: [otusproj]
+
+TASK [Check containers are up] *********************************************************************************************************************************************************************************
+changed: [otusproj]
+
+TASK [Debug registered var] ************************************************************************************************************************************************************************************
+ok: [otusproj] => {
+    "result.stdout_lines": [
+        "CONTAINER ID   IMAGE                                                  COMMAND                  CREATED         STATUS                            PORTS                           NAMES",
+        "7ebdd359c4da   nginx:latest                                           \"/docker-entrypoint.…\"   2 minutes ago   Up 3 seconds (health: starting)   80/tcp, 0.0.0.0:8443->443/tcp   nf-nginx",
+        "c290fe3b5fe1   docker.elastic.co/beats/filebeat:8.12.1                \"/usr/bin/tini -- /u…\"   2 minutes ago   Up 15 seconds (healthy)                                           nf-filebeat",
+        "925a43e86d43   docker.elastic.co/kibana/kibana:8.12.1                 \"/bin/tini -- /usr/l…\"   2 minutes ago   Up About a minute (healthy)       5601/tcp                        nf-kibana",
+        "afebaee7af26   docker.elastic.co/elasticsearch/elasticsearch:8.12.1   \"/bin/tini -- /usr/l…\"   2 minutes ago   Up 2 minutes (healthy)            9200/tcp, 9300/tcp              nf-elastic"
+    ]
+}
+
+PLAY RECAP *****************************************************************************************************************************************************************************************************
+otusproj                   : ok=14   changed=7    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
 ```
 ## Для восстановления РК проекта на другой машине:
 ```sh

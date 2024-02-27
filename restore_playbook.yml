@@ -1,11 +1,12 @@
 - name: Config new machine
-  hosts: otusprojnew
-  
+  hosts: otusproj
+  vars:
+    user: artys
+    date: '2024-02-27' ### change this to right date of backup
   gather_facts: false
   tasks:
 
   ### install docker and cockpit to monitoring containers state
-
     - name: DNF Update
       become: true
       tags:
@@ -75,11 +76,11 @@
         state: started
         enabled: yes
 
-    - name: Create Backup dir
+    - name: Create dir to import Backups
       tags:
         - config
       ansible.builtin.file:
-        path: /home/artys/backups
+        path: "/home/{{ user }}/backups"
         state: directory
       
   ### add logs dir
@@ -91,44 +92,58 @@
         path: /var/log/nf-app
         mode: 0777
         state: directory
-        owner: artys
-        group: artys
+        owner: "{{ user }}"
+        group: "{{ user }}"
+        recurse: true
 
   # copy all backups to new machine
-    - name: Copy Images and Project Backup to New Host
+    - name: Copy Images Backup to New Host
       tags:
         - copy
       copy:
-        src: "backups/192.168.88.37/home/artys/backups/{{ item }}"
-        dest: /home/artys/backups/
+        src: "backups/images/{{ item }}"
+        dest: "/home/{{ user }}/backups/"
       loop:
         - kibana.tar
         - elasticsearch.tar
         - nginx.tar
         - filebeat.tar
-        - otus-proj.tgz
+    
+    - name: Copy Project Backup to New Host
+      tags:
+        - copy
+      copy:
+        src: "backups/{{ date }}/otus-proj.tgz"
+        dest: "/home/{{ user }}/backups/"
 
   ### add user to group docker  
-    - name: add user 'artys' to group docker
+    - name: add user to docker group
       become: true
       tags:
          - configuration
       user:
-        name: artys
-        comment: artys
-        groups: artys, wheel, docker
+        name: "{{ user }}"
+        comment: "{{ user }}"
+        groups: "{{ user }}, wheel, docker"
         append: yes
 
+- name: Setup Docker after adding user in group docker
+  hosts: otusproj
+  vars:
+    user: artys
+    date: '2024-02-27' ### change this to right date of backup
+  gather_facts: false
+  tasks:
+    - name: Reset connection
+      meta: reset_connection
   ### add backuped images
-
     - name: Load all images from tarball
-      become_user: artys
       tags:
         - docker
       docker_image:
         name: "{{ item.name }}"
         tag: "{{ item.tag }}"
-        load_path: "/home/artys/backups/{{ item.path }}"
+        load_path: "/home/{{ user }}/backups/{{ item.path }}"
         state: present
         source: load
       loop:
@@ -136,20 +151,23 @@
         - { name: 'docker.elastic.co/kibana/kibana', tag: '8.12.1', path: 'kibana.tar' }
         - { name: 'docker.elastic.co/beats/filebeat', tag: '8.12.1', path: 'filebeat.tar' }
         - { name: 'nginx', tag: 'latest', path: 'nginx.tar' }
+      #environment:
+      #  COMPOSE_HTTP_TIMEOUT: 120
+      #  DOCKER_CLIENT_TIMEOUT: 120
   
     - name: Create docker dir in home
       tags:
         - copy
       file:
-        path: /home/artys/docker/otus-proj
+        path: "/home/{{ user }}/docker/otus-proj"
         state: directory
   
     - name: Unarchive project to same directory
       tags:
         - copy
       unarchive:
-        src: /home/artys/backups/otus-proj.tgz
-        dest: /home/artys/docker/otus-proj
+        src: "/home/{{ user }}/backups/otus-proj.tgz"
+        dest: "/home/{{ user }}/docker/otus-proj"
         remote_src: yes
 
   ### there is no need to use IPv6 in this project and this part used to run init.sh correct
@@ -174,7 +192,7 @@
         - config
       shell: sh init.sh
       args:
-        chdir: /home/artys/docker/otus-proj
+        chdir: "/home/{{ user }}/docker/otus-proj"
   
   ### copy service unit to be able operate with app from systemctl
       
@@ -183,7 +201,7 @@
       tags: 
         - config
       copy: 
-        src: /home/artys/docker/otus-proj/config/nf-app.service
+        src: "/home/{{ user }}/docker/otus-proj/config/nf-app.service"
         dest: /etc/systemd/system/
         remote_src: yes
 
