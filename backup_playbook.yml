@@ -15,15 +15,8 @@
         path: backups/{{ ansible_date_time.date }}
         state: directory
       delegate_to: localhost
-  # ### stop service before backup (cause ES indicies)
-  #   - name: Stop nf-app before backup
-  #     become: true
-  #     tags:
-  #       - stop
-  #     systemd:
-  #       name: nf-app
-  #       state: stopped
-    - name: Run app from docker-compose
+
+    - name: Stop app from docker-compose
       community.docker.docker_compose_v2:
         project_src: "/home/{{ user }}/docker/otus-proj/"
         files:
@@ -46,7 +39,7 @@
         recurse: yes
     - name: Create Backup dir
       tags:
-        - archive
+        - test
       ansible.builtin.file:
         path: "/home/{{ user }}/backups/images/"
         state: directory
@@ -66,10 +59,7 @@
         state: restarted
         daemon_reload: true
         name: docker
-      environment:
-        COMPOSE_HTTP_TIMEOUT: 120
-        DOCKER_CLIENT_TIMEOUT: 120
-
+      
     - name: Archive all images as a tarball
       tags:
         - archive
@@ -83,6 +73,17 @@
         - { name: 'docker.elastic.co/kibana/kibana', tag: '8.12.1', path: 'kibana.tar' }
         - { name: 'docker.elastic.co/beats/filebeat', tag: '8.12.1', path: 'filebeat.tar' }
         - { name: 'nginx', tag: 'latest', path: 'nginx.tar' }
+
+    - name: Export all project images
+      tags:
+        - test
+      community.docker.docker_image_export:
+        names:
+          - docker.elastic.co/elasticsearch/elasticsearch:8.12.1
+          - docker.elastic.co/kibana/kibana:8.12.1
+          - docker.elastic.co/beats/filebeat:8.12.1
+          - nginx:latest
+        path: "/home/{{ user }}/backups/images/otus_images.tar"
       
     - name: Check backups are created in systemctl
       become: true
@@ -121,15 +122,6 @@
         dest: backups/{{ ansible_date_time.date }}/
         flat: yes  
       
-  # ### run app after backup is completed
-  #   - name: Enable & Start nf-app
-  #     become: true
-  #     tags:
-  #       - start
-  #     systemd:
-  #       name: nf-app
-  #       state: started
-  #       enabled: yes
     - name: Run app from docker-compose
       community.docker.docker_compose_v2:
         project_src: "/home/{{ user }}/docker/otus-proj/"

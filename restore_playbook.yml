@@ -2,20 +2,17 @@
   hosts: otusproj
   vars:
     user: artys
-    date: '2024-02-27' ### change this to right date of backup
+    date: '2024-02-28' ### change this to right date of backup
   gather_facts: false
   
   tasks:
-    - meta: refresh_inventory
-      tags:
-        - pre
 
     - name: Copy docker-repo to yum.repos.d
-      #become: true
+      become: true
       tags:
-        - pre
+        - setup
       ansible.builtin.copy:
-        src: /home/{{ user }}/ansible/docker-ce.repo
+        src: docker-ce.repo
         dest: /etc/yum.repos.d
         remote_src: no
 
@@ -26,6 +23,17 @@
         - setup
       ansible.builtin.dnf:
         update_cache: yes
+
+    - name: Add env for docker
+      become: true
+      tags:
+        - pre
+      shell: sed -i '/DOCKER_/{N;d;}' /etc/environment && echo -e "export DOCKER_TIMEOUT=200" >> /etc/environment && source /etc/environment
+      
+    - name: Check env for docker
+      tags:
+        - pre
+      shell: echo "DOCKER_TIMEOUT" $DOCKER_TIMEOUT
   
     - name: Upgrade all packages
       become: true
@@ -46,14 +54,15 @@
         - cockpit
         - cockpit-machines
         - cockpit-storaged
+        - cockpit-pcp
         - docker-ce
         - docker-ce-cli
-        - docker-compose
+        - docker-compose-plugin
   
     - name: Copy cockpit-docker.tar.gz
       become: true
       tags:
-        - pre
+        - setup
       copy:
         src: cockpit-docker.tar.gz
         dest: /usr/share/cockpit
@@ -71,6 +80,15 @@
         dest: /usr/share/cockpit/
         remote_src: yes
 
+    - name: List installed packages
+      tags:
+        - setup
+      shell: dnf list installed | grep -E "cockpit|cockpit-machines|cockpit-storaged|cockpit-pcp|docker-ce-cli|docker-ce|docker-compose-plugin"
+      register: result
+    - debug: var=result.stdout_lines
+      tags:
+        - setup
+
     - name: Enable & Start cockpit.socket
       become: true
       tags:
@@ -79,7 +97,16 @@
         name: cockpit.socket
         state: started
         enabled: yes
-
+    
+    - name: Enable & Start pmlogger.service
+      become: true
+      tags:
+        - setup
+      systemd:
+        name: pmlogger.service
+        state: started
+        enabled: yes
+    
     - name: Enable & Start docker
       tags:
         - config
@@ -96,27 +123,6 @@
         path: "/home/{{ user }}/backups"
         state: directory
             
-    - name: Put SELinux in permissive mode, logging actions that would be blocked
-      become: true
-      tags:
-        - copy
-      ansible.posix.selinux:
-        policy: targeted
-        state: permissive
-
-    # - name: Create and change rights of Log dir
-    #   become: true
-    #   tags:
-    #     - copy
-    #   ansible.builtin.file:
-    #     path: /var/log/nf-app
-    #     state: directory
-    #     mode: '0777'
-    #     owner: '{{ user }}'
-    #     group: '{{ user }}'
-    #     recurse: yes
-
-
   # copy all backups to new machine
     - name: Copy Images Backup to New Host
       tags:
@@ -158,28 +164,47 @@
       ansible.builtin.systemd_service:
         state: restarted
         daemon_reload: true
-        name: docker
-      environment:
-        COMPOSE_HTTP_TIMEOUT: 120
-        DOCKER_CLIENT_TIMEOUT: 120
+        name: docker        
+    
+    - name: envs check
+      shell:  echo "DOCKER_TIMEOUT" $DOCKER_TIMEOUT
+      register: result
+    - debug: var=result.stdout_lines
+      tags:
+        - pre
 
   ### add backuped images
-    - name: Load all images from tarball
+    # - name: Load all images from tarball
+    #   tags:
+    #     - docker
+    #   docker_image:
+    #     name: "{{ item.name }}"
+    #     tag: "{{ item.tag }}"
+    #     load_path: "/home/{{ user }}/backups/{{ item.path }}"
+    #     state: present
+    #     source: load
+    #   loop:
+    #     - { name: 'docker.elastic.co/kibana/kibana', tag: '8.12.1', path: 'kibana.tar' }
+    #     - { name: 'docker.elastic.co/elasticsearch/elasticsearch', tag: '8.12.1', path: 'elasticsearch.tar' }
+    #     - { name: 'docker.elastic.co/beats/filebeat', tag: '8.12.1', path: 'filebeat.tar' }
+    #     - { name: 'nginx', tag: 'latest', path: 'nginx.tar' }
+      
+    - name: Load all image(s) from the given tar files
       tags:
         - docker
-      docker_image:
-        name: "{{ item.name }}"
-        tag: "{{ item.tag }}"
-        load_path: "/home/{{ user }}/backups/{{ item.path }}"
-        state: present
-        source: load
-      loop:
-        - { name: 'docker.elastic.co/elasticsearch/elasticsearch', tag: '8.12.1', path: 'elasticsearch.tar' }
-        - { name: 'docker.elastic.co/kibana/kibana', tag: '8.12.1', path: 'kibana.tar' }
-        - { name: 'docker.elastic.co/beats/filebeat', tag: '8.12.1', path: 'filebeat.tar' }
-        - { name: 'nginx', tag: 'latest', path: 'nginx.tar' }
+      community.docker.docker_image_load:
+        path: "/home/{{ user }}/backups/{{ item }}"
+      loop: 
+        - kibana.tar
+        - elasticsearch.tar
+        - filebeat.tar
+        - nginx.tar
+      register: result
+    
+    - debug: var=result.stdout_lines
+      tags:
+        - pre
       
-  
     - name: Create docker dir in home
       tags:
         - copy
@@ -219,28 +244,6 @@
       args:
         chdir: "/home/{{ user }}/docker/otus-proj"
   
-  ### copy service unit to be able operate with app from systemctl
-      
-    # - name: Copy nf-app.service to /etc/systemd/system/
-    #   become: true
-    #   tags: 
-    #     - config
-    #   copy: 
-    #     src: "/home/{{ user }}/docker/otus-proj/config/nf-app.service"
-    #     dest: /etc/systemd/system/
-    #     remote_src: yes
-
-  ### add nf-app to autorun and start it
-    
-    # - name: Enable & Start nf-app
-    #   become: true
-    #   tags:
-    #     - start
-    #   systemd:
-    #     name: nf-app
-    #     state: started
-    #     enabled: yes
-
     - name: Run app from docker-compose
       community.docker.docker_compose_v2:
         project_src: "/home/{{ user }}/docker/otus-proj/"
@@ -253,21 +256,5 @@
         - check
       shell: docker ps -a
       register: result
+    - debug: var=result.stdout_lines
     
-    # - name: Try to see 'docker ps -a'
-    #   tags:
-    #     - check
-    #   debug: var=result.stdout_lines
-
-    # - name: Check service status in systemctl
-    #   become: true
-    #   tags:
-    #     - check
-    #   shell: systemctl status nf-app
-    #   register: result
-    
-    # - name: Try to see 'systemctl status nf-app'
-    #   tags:
-    #     - check
-    #   debug: var=result.stdout_lines
-

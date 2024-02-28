@@ -5,10 +5,13 @@
 
   tasks:
 
-    - name: run sh ip int br
-      ios_command:
-        commands: sh ip int br
+    - name: sh run
+      cisco.ios.ios_command:
+        commands: sh run
+      register: result
 
-    - name: run sh ip arp
-      ios_command:
-        commands: sh ip arp
+    - debug: var=result.stdout_lines
+
+    # - name: run sh ip arp
+    #   cisco.ios.ios_command:
+    #     commands: sh ip arp
