@@ -4,7 +4,20 @@
     user: artys
     date: '2024-02-27' ### change this to right date of backup
   gather_facts: false
+  
   tasks:
+    - meta: refresh_inventory
+      tags:
+        - pre
+
+    - name: Copy docker-repo to yum.repos.d
+      #become: true
+      tags:
+        - pre
+      ansible.builtin.copy:
+        src: /home/{{ user }}/ansible/docker-ce.repo
+        dest: /etc/yum.repos.d
+        remote_src: no
 
   ### install docker and cockpit to monitoring containers state
     - name: DNF Update
@@ -40,7 +53,7 @@
     - name: Copy cockpit-docker.tar.gz
       become: true
       tags:
-        - setup
+        - pre
       copy:
         src: cockpit-docker.tar.gz
         dest: /usr/share/cockpit
@@ -82,19 +95,27 @@
       ansible.builtin.file:
         path: "/home/{{ user }}/backups"
         state: directory
-      
-  ### add logs dir
-    - name: Create Log dir
+            
+    - name: Put SELinux in permissive mode, logging actions that would be blocked
       become: true
       tags:
-        - check
-      ansible.builtin.file:
-        path: /var/log/nf-app
-        mode: 0777
-        state: directory
-        owner: "{{ user }}"
-        group: "{{ user }}"
-        recurse: true
+        - copy
+      ansible.posix.selinux:
+        policy: targeted
+        state: permissive
+
+    # - name: Create and change rights of Log dir
+    #   become: true
+    #   tags:
+    #     - copy
+    #   ansible.builtin.file:
+    #     path: /var/log/nf-app
+    #     state: directory
+    #     mode: '0777'
+    #     owner: '{{ user }}'
+    #     group: '{{ user }}'
+    #     recurse: yes
+
 
   # copy all backups to new machine
     - name: Copy Images Backup to New Host
@@ -127,15 +148,21 @@
         groups: "{{ user }}, wheel, docker"
         append: yes
 
-- name: Setup Docker after adding user in group docker
-  hosts: otusproj
-  vars:
-    user: artys
-    date: '2024-02-27' ### change this to right date of backup
-  gather_facts: false
-  tasks:
-    - name: Reset connection
+    - name: Reset connection to reapply groups to user
       meta: reset_connection
+
+    - name: Reload docker with timout envs to import images
+      become: true
+      tags:
+        - docker
+      ansible.builtin.systemd_service:
+        state: restarted
+        daemon_reload: true
+        name: docker
+      environment:
+        COMPOSE_HTTP_TIMEOUT: 120
+        DOCKER_CLIENT_TIMEOUT: 120
+
   ### add backuped images
     - name: Load all images from tarball
       tags:
@@ -151,9 +178,7 @@
         - { name: 'docker.elastic.co/kibana/kibana', tag: '8.12.1', path: 'kibana.tar' }
         - { name: 'docker.elastic.co/beats/filebeat', tag: '8.12.1', path: 'filebeat.tar' }
         - { name: 'nginx', tag: 'latest', path: 'nginx.tar' }
-      #environment:
-      #  COMPOSE_HTTP_TIMEOUT: 120
-      #  DOCKER_CLIENT_TIMEOUT: 120
+      
   
     - name: Create docker dir in home
       tags:
@@ -162,7 +187,7 @@
         path: "/home/{{ user }}/docker/otus-proj"
         state: directory
   
-    - name: Unarchive project to same directory
+    - name: Unarchive project to this directory
       tags:
         - copy
       unarchive:
@@ -196,25 +221,32 @@
   
   ### copy service unit to be able operate with app from systemctl
       
-    - name: Copy .service to /etc/systemd/system/
-      become: true
-      tags: 
-        - config
-      copy: 
-        src: "/home/{{ user }}/docker/otus-proj/config/nf-app.service"
-        dest: /etc/systemd/system/
-        remote_src: yes
+    # - name: Copy nf-app.service to /etc/systemd/system/
+    #   become: true
+    #   tags: 
+    #     - config
+    #   copy: 
+    #     src: "/home/{{ user }}/docker/otus-proj/config/nf-app.service"
+    #     dest: /etc/systemd/system/
+    #     remote_src: yes
 
   ### add nf-app to autorun and start it
     
-    - name: Enable & Start nf-app
-      become: true
-      tags:
-        - start
-      systemd:
-        name: nf-app
-        state: started
-        enabled: yes
+    # - name: Enable & Start nf-app
+    #   become: true
+    #   tags:
+    #     - start
+    #   systemd:
+    #     name: nf-app
+    #     state: started
+    #     enabled: yes
+
+    - name: Run app from docker-compose
+      community.docker.docker_compose_v2:
+        project_src: "/home/{{ user }}/docker/otus-proj/"
+        files:
+        - docker-compose.yml
+        state: present
     
     - name: Check containers are up
       tags:
@@ -222,20 +254,20 @@
       shell: docker ps -a
       register: result
     
-    - name: Try to see 'docker ps -a'
-      tags:
-        - check
-      debug: var=result.stdout_lines
+    # - name: Try to see 'docker ps -a'
+    #   tags:
+    #     - check
+    #   debug: var=result.stdout_lines
 
-    - name: Check service status in systemctl
-      become: true
-      tags:
-        - check
-      shell: systemctl status nf-app
-      register: result
+    # - name: Check service status in systemctl
+    #   become: true
+    #   tags:
+    #     - check
+    #   shell: systemctl status nf-app
+    #   register: result
     
-    - name: Try to see 'systemctl status nf-app'
-      tags:
-        - check
-      debug: var=result.stdout_lines
+    # - name: Try to see 'systemctl status nf-app'
+    #   tags:
+    #     - check
+    #   debug: var=result.stdout_lines
 
