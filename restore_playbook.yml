@@ -24,17 +24,6 @@
       ansible.builtin.dnf:
         update_cache: yes
 
-    - name: Add env for docker
-      become: true
-      tags:
-        - pre
-      shell: sed -i '/DOCKER_/{N;d;}' /etc/environment && echo -e "export DOCKER_TIMEOUT=200" >> /etc/environment && source /etc/environment
-      
-    - name: Check env for docker
-      tags:
-        - pre
-      shell: echo "DOCKER_TIMEOUT" $DOCKER_TIMEOUT
-  
     - name: Upgrade all packages
       become: true
       tags:
@@ -128,13 +117,8 @@
       tags:
         - copy
       copy:
-        src: "backups/images/{{ item }}"
+        src: "backups/images/otus_images.tar"
         dest: "/home/{{ user }}/backups/"
-      loop:
-        - kibana.tar
-        - elasticsearch.tar
-        - nginx.tar
-        - filebeat.tar
     
     - name: Copy Project Backup to New Host
       tags:
@@ -157,21 +141,6 @@
     - name: Reset connection to reapply groups to user
       meta: reset_connection
 
-    - name: Reload docker with timout envs to import images
-      become: true
-      tags:
-        - docker
-      ansible.builtin.systemd_service:
-        state: restarted
-        daemon_reload: true
-        name: docker        
-    
-    - name: envs check
-      shell:  echo "DOCKER_TIMEOUT" $DOCKER_TIMEOUT
-      register: result
-    - debug: var=result.stdout_lines
-      tags:
-        - pre
 
   ### add backuped images
     # - name: Load all images from tarball
@@ -193,13 +162,9 @@
       tags:
         - docker
       community.docker.docker_image_load:
-        path: "/home/{{ user }}/backups/{{ item }}"
-      loop: 
-        - kibana.tar
-        - elasticsearch.tar
-        - filebeat.tar
-        - nginx.tar
+        path: "/home/{{ user }}/backups/otus_images.tar"
       register: result
+      timeout: 300
     
     - debug: var=result.stdout_lines
       tags:

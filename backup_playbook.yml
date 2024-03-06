@@ -22,12 +22,6 @@
         files:
         - docker-compose.yml
         state: absent
-      register: result
-    
-    - name: Debug registered var
-      tags:
-        - check
-      debug: var=result.stdout_lines
 
   ### create dir for backups on local machine
     - name: Create Backup dir
@@ -51,32 +45,9 @@
          path: "/home/{{ user }}/docker/otus-proj/."
          dest: "/home/{{ user }}/backups/{{ ansible_date_time.date }}/otus-proj.tgz"
 
-    - name: Reload docker with timout envs to import images
-      become: true
-      tags:
-        - docker
-      ansible.builtin.systemd_service:
-        state: restarted
-        daemon_reload: true
-        name: docker
-      
-    - name: Archive all images as a tarball
-      tags:
-        - archive
-      docker_image:
-        name: "{{ item.name }}"
-        tag: "{{ item.tag }}"
-        archive_path: "/home/{{ user }}/backups/images/{{ item.path }}"
-        source: local
-      loop:
-        - { name: 'docker.elastic.co/elasticsearch/elasticsearch', tag: '8.12.1', path: 'elasticsearch.tar' }
-        - { name: 'docker.elastic.co/kibana/kibana', tag: '8.12.1', path: 'kibana.tar' }
-        - { name: 'docker.elastic.co/beats/filebeat', tag: '8.12.1', path: 'filebeat.tar' }
-        - { name: 'nginx', tag: 'latest', path: 'nginx.tar' }
-
     - name: Export all project images
       tags:
-        - test
+        - archive
       community.docker.docker_image_export:
         names:
           - docker.elastic.co/elasticsearch/elasticsearch:8.12.1
@@ -84,8 +55,9 @@
           - docker.elastic.co/beats/filebeat:8.12.1
           - nginx:latest
         path: "/home/{{ user }}/backups/images/otus_images.tar"
+        timeout: 300
       
-    - name: Check backups are created in systemctl
+    - name: Check backups are created
       become: true
       tags:
         - check
@@ -102,16 +74,11 @@
       tags:
         - copy
       fetch:
-        src: "/home/{{ user }}/backups/images/{{ item }}"
+        src: "/home/{{ user }}/backups/images/otus_images.tar"
    ### if want to put in "date" dir
         dest: backups/images/
         flat: yes
    #    dest: backups/
-      loop: 
-        - kibana.tar
-        - elasticsearch.tar
-        - nginx.tar
-        - filebeat.tar
 
     - name: Copy project to this host
       tags:

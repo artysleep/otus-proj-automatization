@@ -7,7 +7,7 @@
 
     - name: sh run
       cisco.ios.ios_command:
-        commands: sh run
+        commands: show running-config
       register: result
 
     - debug: var=result.stdout_lines
