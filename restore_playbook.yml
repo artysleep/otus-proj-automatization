@@ -2,7 +2,7 @@
   hosts: otusproj
   vars:
     user: artys
-    date: '2024-02-28' ### change this to right date of backup
+    date: '2024-03-08' ### change this to right date of backup
   gather_facts: false
   
   tasks:
@@ -47,6 +47,7 @@
         - docker-ce
         - docker-ce-cli
         - docker-compose-plugin
+        - git
   
     - name: Copy cockpit-docker.tar.gz
       become: true
@@ -59,6 +60,25 @@
         mode: 0644
         owner: root
         group: root
+
+    - name: Stop docker
+      tags:
+        - config
+      become: true
+      systemd:
+        name: docker.socket
+        state: stopped
+
+    - name: Rm old backup
+      ansible.builtin.file:
+        path: "/home/{{ user }}/restore"
+        state: absent
+    
+    - name: Rm old project
+      become: true
+      ansible.builtin.file:
+        path: "/home/{{ user }}/nf-app"
+        state: absent
    
     - name: Unarchive cockpit-docker.tar.gz
       become: true
@@ -72,11 +92,26 @@
     - name: List installed packages
       tags:
         - setup
-      shell: dnf list installed | grep -E "cockpit|cockpit-machines|cockpit-storaged|cockpit-pcp|docker-ce-cli|docker-ce|docker-compose-plugin"
+      shell: dnf list installed | grep -E "git|cockpit|cockpit-machines|cockpit-storaged|cockpit-pcp|docker-ce-cli|docker-ce|docker-compose-plugin"
       register: result
     - debug: var=result.stdout_lines
       tags:
         - setup
+
+      ### there is no need to use IPv6 in this project and this part used to run init.sh correct
+    - name: Disable IPv6 with sysctl
+      become: true
+      ansible.posix.sysctl:
+        name: "{{ item }}"
+        value: "1"
+        state: "present"
+        reload: "yes"
+      tags:
+        - config
+      with_items:
+      - net.ipv6.conf.all.disable_ipv6
+      - net.ipv6.conf.default.disable_ipv6
+      - net.ipv6.conf.lo.disable_ipv6
 
     - name: Enable & Start cockpit.socket
       become: true
@@ -95,21 +130,12 @@
         name: pmlogger.service
         state: started
         enabled: yes
-    
-    - name: Enable & Start docker
-      tags:
-        - config
-      become: true
-      systemd:
-        name: docker
-        state: started
-        enabled: yes
 
     - name: Create dir to import Backups
       tags:
         - config
       ansible.builtin.file:
-        path: "/home/{{ user }}/backups"
+        path: "/home/{{ user }}/restore"
         state: directory
             
   # copy all backups to new machine
@@ -117,15 +143,15 @@
       tags:
         - copy
       copy:
-        src: "backups/images/otus_images.tar"
-        dest: "/home/{{ user }}/backups/"
+        src: "backups/images/nf-images.tar"
+        dest: "/home/{{ user }}/restore/"
     
     - name: Copy Project Backup to New Host
       tags:
         - copy
       copy:
-        src: "backups/{{ date }}/otus-proj.tgz"
-        dest: "/home/{{ user }}/backups/"
+        src: "backups/{{ date }}/nf-app.tgz"
+        dest: "/home/{{ user }}/restore/"
 
   ### add user to group docker  
     - name: add user to docker group
@@ -140,65 +166,43 @@
 
     - name: Reset connection to reapply groups to user
       meta: reset_connection
-
-
-  ### add backuped images
-    # - name: Load all images from tarball
-    #   tags:
-    #     - docker
-    #   docker_image:
-    #     name: "{{ item.name }}"
-    #     tag: "{{ item.tag }}"
-    #     load_path: "/home/{{ user }}/backups/{{ item.path }}"
-    #     state: present
-    #     source: load
-    #   loop:
-    #     - { name: 'docker.elastic.co/kibana/kibana', tag: '8.12.1', path: 'kibana.tar' }
-    #     - { name: 'docker.elastic.co/elasticsearch/elasticsearch', tag: '8.12.1', path: 'elasticsearch.tar' }
-    #     - { name: 'docker.elastic.co/beats/filebeat', tag: '8.12.1', path: 'filebeat.tar' }
-    #     - { name: 'nginx', tag: 'latest', path: 'nginx.tar' }
       
-    - name: Load all image(s) from the given tar files
-      tags:
-        - docker
-      community.docker.docker_image_load:
-        path: "/home/{{ user }}/backups/otus_images.tar"
-      register: result
-      timeout: 300
     
-    - debug: var=result.stdout_lines
-      tags:
-        - pre
-      
     - name: Create docker dir in home
       tags:
         - copy
       file:
-        path: "/home/{{ user }}/docker/otus-proj"
+        path: "/home/{{ user }}/nf-app"
         state: directory
   
     - name: Unarchive project to this directory
       tags:
         - copy
       unarchive:
-        src: "/home/{{ user }}/backups/otus-proj.tgz"
-        dest: "/home/{{ user }}/docker/otus-proj"
+        src: "/home/{{ user }}/restore/nf-app.tgz"
+        dest: "/home/{{ user }}/nf-app"
         remote_src: yes
 
-  ### there is no need to use IPv6 in this project and this part used to run init.sh correct
-    - name: Disable IPv6 with sysctl
-      become: true
-      ansible.posix.sysctl:
-        name: "{{ item }}"
-        value: "1"
-        state: "present"
-        reload: "yes"
+    - name: Enable & Start docker
       tags:
         - config
-      with_items:
-      - net.ipv6.conf.all.disable_ipv6
-      - net.ipv6.conf.default.disable_ipv6
-      - net.ipv6.conf.lo.disable_ipv6
+      become: true
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Load all image(s) from the given tar files
+      tags:
+        - docker
+      community.docker.docker_image_load:
+        path: "/home/{{ user }}/restore/nf-images.tar"
+      register: result
+      timeout: 300
+    
+    - debug: var=result.stdout_lines
+      tags:
+        - pre
 
   ### change IP addresses in .env ###
     
@@ -207,11 +211,11 @@
         - config
       shell: sh init.sh
       args:
-        chdir: "/home/{{ user }}/docker/otus-proj"
+        chdir: "/home/{{ user }}/nf-app/"
   
     - name: Run app from docker-compose
       community.docker.docker_compose_v2:
-        project_src: "/home/{{ user }}/docker/otus-proj/"
+        project_src: "/home/{{ user }}/nf-app/"
         files:
         - docker-compose.yml
         state: present

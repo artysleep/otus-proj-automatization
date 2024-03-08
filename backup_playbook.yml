@@ -18,7 +18,7 @@
 
     - name: Stop app from docker-compose
       community.docker.docker_compose_v2:
-        project_src: "/home/{{ user }}/docker/otus-proj/"
+        project_src: "/home/{{ user }}/nf-app/"
         files:
         - docker-compose.yml
         state: absent
@@ -28,22 +28,22 @@
       tags:
         - archive
       ansible.builtin.file:
-        path: "/home/{{ user }}/backups/{{ ansible_date_time.date }}/"
+        path: "/home/{{ user }}/backup/{{ ansible_date_time.date }}/"
         state: directory
         recurse: yes
     - name: Create Backup dir
       tags:
         - test
       ansible.builtin.file:
-        path: "/home/{{ user }}/backups/images/"
+        path: "/home/{{ user }}/backup/images/"
         state: directory
         recurse: yes
   
   ### create backups of proj and images
     - name: Create Backup of current Project state
       community.general.archive:
-         path: "/home/{{ user }}/docker/otus-proj/."
-         dest: "/home/{{ user }}/backups/{{ ansible_date_time.date }}/otus-proj.tgz"
+         path: "/home/{{ user }}/nf-app/."
+         dest: "/home/{{ user }}/backup/{{ ansible_date_time.date }}/nf-app.tgz"
 
     - name: Export all project images
       tags:
@@ -54,14 +54,14 @@
           - docker.elastic.co/kibana/kibana:8.12.1
           - docker.elastic.co/beats/filebeat:8.12.1
           - nginx:latest
-        path: "/home/{{ user }}/backups/images/otus_images.tar"
+        path: "/home/{{ user }}/backup/images/nf-images.tar"
         timeout: 300
       
     - name: Check backups are created
       become: true
       tags:
         - check
-      shell: ls -lah /home/{{ user }}/backups/{{ ansible_date_time.date }}/
+      shell: ls -lah /home/{{ user }}/backup/{{ ansible_date_time.date }}/
       register: result
 
     - name: Debug registered var
@@ -74,7 +74,7 @@
       tags:
         - copy
       fetch:
-        src: "/home/{{ user }}/backups/images/otus_images.tar"
+        src: "/home/{{ user }}/backup/images/nf-images.tar"
    ### if want to put in "date" dir
         dest: backups/images/
         flat: yes
@@ -84,14 +84,14 @@
       tags:
         - copy
       fetch:
-        src: "/home/{{ user }}/backups/{{ ansible_date_time.date }}/otus-proj.tgz"
+        src: "/home/{{ user }}/backup/{{ ansible_date_time.date }}/nf-app.tgz"
    ### if want to put in "date" dir
         dest: backups/{{ ansible_date_time.date }}/
         flat: yes  
       
     - name: Run app from docker-compose
       community.docker.docker_compose_v2:
-        project_src: "/home/{{ user }}/docker/otus-proj/"
+        project_src: "/home/{{ user }}/nf-app/"
         files:
         - docker-compose.yml
         state: present
