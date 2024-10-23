@@ -1,3 +1,5 @@
 backups/
-inventories/cisco*
-cisco*
+inventories/
+misc/
+roles/*/files/
+roles/*/vars/

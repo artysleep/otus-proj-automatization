@@ -1,0 +1,8 @@
+---
+- name: Astra Server Prepare
+  hosts: astra_kii
+  gather_facts: true
+  become: true
+  roles:
+    - astra_install
+    - astra_jatoba

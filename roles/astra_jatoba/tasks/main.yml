@@ -1,0 +1,114 @@
+---
+
+- name: Print all available facts
+  debug:
+    var: ansible_facts.eth0.ipv4.address
+
+- name: Create {{ repo_path }} directory
+  file:
+    path: "{{ repo_path }}"
+    state: directory
+    recurse: yes
+    owner: kii
+    group: kii
+    mode: '0777'
+
+- name: Copy Jatoba repo
+  copy:
+    src: jatoba/
+    dest: "{{ repo_path }}"
+    remote_src: no
+
+- name: Add apt-key
+  apt_key:
+    file: "{{ repo_path }}/DEB-GPG-KEY-Jatoba"
+    state: present
+
+- name: Copy APT sources.list
+  copy:
+    src: sources.list
+    dest: /etc/apt/
+    remote_src: no
+  
+- name: apt-get update
+  apt:
+     update_cache: yes
+
+- name: Install Jatoba
+  apt:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - jatoba4-client 
+    - jatoba4-contrib 
+    - jatoba4-libs 
+    - jatoba4-server
+
+- name: Check if jatoba-4.service exists
+  stat: 
+    path: "/etc/systemd/system/jatoba-4.service"
+  register: jatoba_service_status
+
+- name: Stop & Disable jatoba-4.service
+  when: jatoba_service_status
+  systemd:
+    name: jatoba-4.service
+    state: stopped
+    enabled: no
+
+- name: Clean previos installation
+  shell:
+    cmd: rm -rf /var/lib/jatoba/4/data/*
+- name: Run Jatoba
+  shell:
+    chdir: "{{ jatoba_bin_path }}/"
+    cmd: ./jatoba-setup initdb jatoba-4
+  environment:
+    PGSETUP_INITDB_OPTIONS: "--locale=ru_RU.utf8 --encoding=UTF-8"
+
+- name: Get Jatoba request.dat
+  shell:
+    chdir: "{{ jatoba_bin_path }}/"
+    cmd: echo -e "{{ lic_key }}\n{{ lic_email }}\n2\n{{ repo_path }}" | ./jactivator
+
+- name: Copy request to local machine
+  fetch:
+    src: "{{ repo_path }}/request.dat"
+    dest: "{{ home_misc_path }}/{{ ansible_facts.eth0.ipv4.address }}.dat"
+    flat: yes
+
+- name: Get license.bin
+  pause:
+    prompt: > 
+      Press Enter to continue, Ctrl+C to interrupt: 
+      When get license.bin from 
+      https://license.gaz-is.ru/offlineActivate
+      and put to ansible/misc and rename like {{ ansible_facts.eth0.ipv4.address }}.bin
+
+- name: Copy license.bin to jatoba folder
+  copy:
+    src: "misc/{{ ansible_facts.eth0.ipv4.address }}.bin"
+    dest: "{{ jatoba_bin_path }}/jatoba.cer"
+    owner: postgres
+    group: postgres
+
+- name: Change ownership of a "{{ jatoba_bin_path }}/jatoba.cer
+  file:
+    path: "{{ jatoba_bin_path }}/jatoba.cer"
+    owner: postgres
+    group: postgres
+  
+- name: Replace license path in  postgresql.conf
+  shell: sed -i 's#'jatoba.cer'#'{{ jatoba_bin_path }}/jatoba.cer'#' /var/lib/jatoba/4/data/postgresql.conf
+
+- name: Enable & Start jatoba-4.service
+  systemd:
+    name: jatoba-4.service
+    state: started
+    enabled: yes
+
+# - name: Get IP-address
+#   tags:
+#     - setup
+#   shell: dnf list installed | grep -E "cockpit|cockpit-machines|cockpit-storaged|cockpit-pcp|docker-ce-cli|docker-ce|docker-compose-plugin"
+#   register: result

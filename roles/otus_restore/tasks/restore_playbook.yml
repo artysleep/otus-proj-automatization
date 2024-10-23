@@ -140,23 +140,6 @@
 
     - name: Reset connection to reapply groups to user
       meta: reset_connection
-
-
-  ### add backuped images
-    # - name: Load all images from tarball
-    #   tags:
-    #     - docker
-    #   docker_image:
-    #     name: "{{ item.name }}"
-    #     tag: "{{ item.tag }}"
-    #     load_path: "/home/{{ user }}/backups/{{ item.path }}"
-    #     state: present
-    #     source: load
-    #   loop:
-    #     - { name: 'docker.elastic.co/kibana/kibana', tag: '8.12.1', path: 'kibana.tar' }
-    #     - { name: 'docker.elastic.co/elasticsearch/elasticsearch', tag: '8.12.1', path: 'elasticsearch.tar' }
-    #     - { name: 'docker.elastic.co/beats/filebeat', tag: '8.12.1', path: 'filebeat.tar' }
-    #     - { name: 'nginx', tag: 'latest', path: 'nginx.tar' }
       
     - name: Load all image(s) from the given tar files
       tags:
